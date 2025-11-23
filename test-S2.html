@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Google S2 空间索引 - 投影演示</title>
+  <!-- 引入 Three.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <!-- 字体 -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      margin: 0;
+      background-color: #000;
+      overflow: hidden;
+      font-family: 'Noto Sans SC', 'Orbitron', sans-serif;
+      color: #00ff99;
+    }
+
+    /* 赛博朋克 HUD 面板 */
+    #hud-container {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      width: 340px;
+      background: rgba(5, 10, 15, 0.85);
+      border: 1px solid #00ffff;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+      backdrop-filter: blur(5px);
+      z-index: 10;
+    }
+
+    #hud-container::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, #00ffff, #00ff99);
+    }
+
+    h2 {
+      font-family: 'Orbitron', sans-serif;
+      margin: 0 0 15px 0;
+      font-size: 20px;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      text-align: center;
+      text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+    }
+
+    .control-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      color: #888;
+      margin-bottom: 5px;
+    }
+
+    input[type="number"], input[type="text"] {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid #333;
+      color: #00ff99;
+      padding: 8px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 14px;
+      border-radius: 4px;
+      transition: border-color 0.3s;
+      box-sizing: border-box;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #00ffff;
+    }
+
+    /* 投影模式切换按钮 */
+    .mode-switcher {
+      display: flex;
+      background: rgba(0,0,0,0.5);
+      border-radius: 4px;
+      margin-bottom: 15px;
+      border: 1px solid #333;
+      overflow: hidden;
+    }
+
+    .mode-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #888;
+      padding: 8px 0;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.3s;
+      border-right: 1px solid #333;
+    }
+
+    .mode-btn:last-child {
+      border-right: none;
+    }
+
+    .mode-btn.active {
+      background: rgba(0, 255, 255, 0.2);
+      color: #00ffff;
+      box-shadow: inset 0 0 10px rgba(0,255,255,0.2);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    button {
+      flex: 1;
+      background: rgba(0, 255, 255, 0.1);
+      border: 1px solid #00ffff;
+      color: #00ffff;
+      padding: 10px;
+      font-family: 'Noto Sans SC', sans-serif;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 14px;
+    }
+
+    button:hover {
+      background: #00ffff;
+      color: #000;
+      box-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
+    }
+
+    button.secondary {
+      border-color: #ff0055;
+      color: #ff0055;
+      background: rgba(255, 0, 85, 0.1);
+    }
+
+    button.secondary:hover {
+      background: #ff0055;
+      color: white;
+      box-shadow: 0 0 15px rgba(255, 0, 85, 0.5);
+    }
+
+    #output-panel {
+      margin-top: 20px;
+      border-top: 1px solid #333;
+      padding-top: 15px;
+    }
+
+    .data-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .data-label { color: #888; }
+    .data-value { color: #fff; font-family: 'Orbitron', monospace; }
+    .highlight { color: #00ff99; text-shadow: 0 0 5px rgba(0, 255, 153, 0.5); }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      margin-top: 10px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .toggle-row input { margin-right: 10px; }
+
+    /* 提示信息 */
+    .tip {
+      font-size: 12px;
+      color: #555;
+      margin-top: 5px;
+      font-style: italic;
+    }
+
+  </style>
+</head>
+<body>
+
+<div id="hud-container">
+  <h2>S2 空间索引演示</h2>
+
+  <!-- 模式切换 -->
+  <div class="control-group">
+    <label>展示模式 (PROJECTION MODE)</label>
+    <div class="mode-switcher">
+      <button class="mode-btn active" onclick="setMode(0)" id="btn-sphere">球体 (Sphere)</button>
+      <button class="mode-btn" onclick="setMode(1)" id="btn-cube">立方体 (Cube)</button>
+      <button class="mode-btn" onclick="setMode(2)" id="btn-unfold">展开 (Unfold)</button>
+    </div>
+    <div class="tip" id="mode-tip">标准地球视图</div>
+  </div>
+
+  <div class="control-group">
+    <label>纬度 (LATITUDE)</label>
+    <input type="number" id="lat" value="39.9042" step="0.0001">
+  </div>
+
+  <div class="control-group">
+    <label>经度 (LONGITUDE)</label>
+    <input type="number" id="lng" value="116.4074" step="0.0001">
+  </div>
+
+  <div class="control-group">
+    <label>网格层级 (LEVEL 0-20)</label>
+    <input type="number" id="level" value="4" min="0" max="20">
+  </div>
+
+  <div class="toggle-row">
+    <input type="checkbox" id="showParents" checked>
+    <label for="showParents">显示父级网格 (显示层级关系)</label>
+  </div>
+
+  <div class="btn-row">
+    <button onclick="updateVisualization()">生成 & 定位</button>
+  </div>
+  <div class="btn-row">
+    <button class="secondary" onclick="resetCamera()">重置相机视角</button>
+  </div>
+
+  <div id="output-panel">
+    <div class="data-row">
+      <span class="data-label">面索引 (Face)</span>
+      <span class="data-value" id="out-face">-</span>
+    </div>
+    <div class="data-row">
+      <span class="data-label">QuadKey</span>
+      <span class="data-value highlight" id="out-token">-</span>
+    </div>
+    <div class="data-row">
+      <span class="data-label">当前层级</span>
+      <span class="data-value" id="out-level">-</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ==========================================
+  // 内置 Mini S2 Geometry 核心算法
+  // ==========================================
+  const SimpleS2 = {
+    // 将经纬度转换为单位球向量 (x, y, z)
+    latLngToXYZ: function(lat, lng) {
+      const phi = (lat * Math.PI) / 180;
+      const theta = (lng * Math.PI) / 180;
+      const cosPhi = Math.cos(phi);
+      return {
+        x: cosPhi * Math.cos(theta),
+        y: cosPhi * Math.sin(theta),
+        z: Math.sin(phi)
+      };
+    },
+
+    // XYZ 转 Face, U, V
+    xyzToFaceUV: function(x, y, z) {
+      let face = 0;
+      const absX = Math.abs(x), absY = Math.abs(y), absZ = Math.abs(z);
+
+      if (absX >= absY && absX >= absZ) face = x > 0 ? 0 : 3;
+      else if (absY >= absX && absY >= absZ) face = y > 0 ? 1 : 4;
+      else face = z > 0 ? 2 : 5;
+
+      let uVal = 0, vVal = 0;
+      switch(face) {
+        case 0: uVal = y/x; vVal = z/x; break;
+        case 1: uVal = -x/y; vVal = z/y; break;
+        case 2: uVal = -x/z; vVal = -y/z; break;
+        case 3: uVal = z/x; vVal = y/x; break;
+        case 4: uVal = z/y; vVal = -x/y; break;
+        case 5: uVal = -y/z; vVal = -x/z; break;
+      }
+      return { face: face, u: uVal, v: vVal };
+    },
+
+    // Face, U, V 转回 球面 XYZ
+    faceUVToXYZ: function(face, u, v) {
+      let x, y, z;
+      switch(face) {
+        case 0: x = 1; y = u; z = v; break;
+        case 1: x = -u; y = 1; z = v; break;
+        case 2: x = -u; y = -v; z = 1; break;
+        case 3: x = -1; y = -v; z = -u; break;
+        case 4: x = v; y = -1; z = -u; break;
+        case 5: x = v; y = u; z = -1; break;
+      }
+      const len = Math.sqrt(x*x + y*y + z*z);
+      return { x: x/len, y: y/len, z: z/len };
+    },
+
+    // 获取 Cell 信息
+    getCell: function(lat, lng, level) {
+      const p = this.latLngToXYZ(lat, lng);
+      const fuv = this.xyzToFaceUV(p.x, p.y, p.z);
+
+      // 简化线性投影 u = 2s - 1
+      const s = (fuv.u + 1) / 2;
+      const t = (fuv.v + 1) / 2;
+
+      const n = Math.pow(2, level);
+      const i = Math.floor(s * n);
+      const j = Math.floor(t * n);
+
+      const iClamped = Math.max(0, Math.min(n - 1, i));
+      const jClamped = Math.max(0, Math.min(n - 1, j));
+
+      return {
+        face: fuv.face,
+        level: level,
+        i: iClamped,
+        j: jClamped,
+        n: n
+      };
+    },
+
+    getCellCorners: function(cell) {
+      const step = 1 / cell.n;
+      const s0 = cell.i * step;
+      const s1 = (cell.i + 1) * step;
+      const t0 = cell.j * step;
+      const t1 = (cell.j + 1) * step;
+
+      const cornersST = [
+        {s: s0, t: t0},
+        {s: s0, t: t1},
+        {s: s1, t: t1},
+        {s: s1, t: t0}
+      ];
+
+      return cornersST.map(c => {
+        const u = 2 * c.s - 1;
+        const v = 2 * c.t - 1;
+        // 返回 FaceUV 数据，方便后续进行不同的 3D 变换
+        return { face: cell.face, u: u, v: v };
+      });
+    },
+
+    getQuadKey: function(cell) {
+      let key = "";
+      for(let l = 1; l <= cell.level; l++) {
+        const mask = 1 << (cell.level - l);
+        const digit = ((cell.i & mask) ? 1 : 0) + ((cell.j & mask) ? 2 : 0);
+        key += digit.toString();
+      }
+      return key;
+    }
+  };
+
+  // ==========================================
+  // Three.js 可视化与形变逻辑
+  // ==========================================
+
+  let scene, camera, renderer, controls;
+  let earthGroup = new THREE.Group(); // 包含 6 个面
+  let cellGroup = new THREE.Group();
+  let targetPointMesh;
+
+  // 动画状态
+  let currentMode = 0; // 0:球, 1:方, 2:展
+  let morphFactors = {
+    sphereToCube: 0, // 0 = sphere, 1 = cube
+    cubeToUnfold: 0  // 0 = cube, 1 = unfolded
+  };
+
+  window.onload = init;
+
+  function init() {
+    // 场景
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x020205);
+    scene.fog = new THREE.FogExp2(0x020205, 0.02);
+
+    // 相机
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 1000);
+    camera.position.set(0, 0, 4.5);
+
+    // 渲染器
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    // 控制器
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 1.0;
+
+    // 创建地球模型（6个面片）
+    createMorphEarth();
+    createStars();
+
+    scene.add(cellGroup);
+
+    // 目标点
+    const pointGeo = new THREE.SphereGeometry(0.02, 16, 16);
+    const pointMat = new THREE.MeshBasicMaterial({ color: 0xff0055 });
+    targetPointMesh = new THREE.Mesh(pointGeo, pointMat);
+    scene.add(targetPointMesh);
+
+    // 初始调用
+    updateVisualization();
+    animate();
+
+    window.addEventListener('resize', onWindowResize, false);
+
+    // 交互优化
+    document.querySelectorAll('input').forEach(input => {
+      input.addEventListener('focus', () => { controls.autoRotate = false; });
+    });
+  }
+
+  // 创建一个由 6 个独立平面组成的“地球”
+  // 这样我们可以独立控制每个面进行展开
+  function createMorphEarth() {
+    scene.add(earthGroup);
+
+    // 6个面的颜色，方便区分
+    const faceColors = [
+      0x0088ff, // Face 0 (X+)
+      0x00ff88, // Face 1 (Y+)
+      0xff8800, // Face 2 (Z+)
+      0x004488, // Face 3 (X-)
+      0x008844, // Face 4 (Y-)
+      0x884400  // Face 5 (Z-)
+    ];
+
+    for(let f=0; f<6; f++) {
+      // 使用 PlaneBufferGeometry，细分程度高一些以便变形
+      const geometry = new THREE.PlaneGeometry(2, 2, 32, 32);
+      const material = new THREE.MeshBasicMaterial({
+        color: faceColors[f],
+        wireframe: true,
+        transparent: true,
+        opacity: 0.15,
+        side: THREE.DoubleSide
+      });
+
+      // 创建 Mesh
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.userData = { faceIndex: f };
+
+      // 存储原始顶点位置 (UV空间: -1 到 1)
+      // PlaneGeometry 默认在 XY 平面，我们需要将其视为 UV 坐标
+      const posAttr = geometry.attributes.position;
+      const originalPositions = [];
+
+      for(let i=0; i<posAttr.count; i++) {
+        // PlaneGeometry 创建的是 x, y, z=0
+        // 我们把 x, y 当作 u, v
+        originalPositions.push({
+          u: posAttr.getX(i), // -1 to 1
+          v: posAttr.getY(i)  // -1 to 1
+        });
+      }
+      mesh.userData.originalPositions = originalPositions;
+
+      earthGroup.add(mesh);
+    }
+  }
+
+  function createStars() {
+    const geometry = new THREE.BufferGeometry();
+    const vertices = [];
+    for (let i = 0; i < 3000; i++) {
+      vertices.push(THREE.MathUtils.randFloatSpread(100));
+      vertices.push(THREE.MathUtils.randFloatSpread(100));
+      vertices.push(THREE.MathUtils.randFloatSpread(100));
+    }
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    const material = new THREE.PointsMaterial({ color: 0xffffff, size: 0.04, transparent: true, opacity: 0.6 });
+    const stars = new THREE.Points(geometry, material);
+    scene.add(stars);
+  }
+
+  // 核心：根据当前形变系数计算三维坐标
+  // input: {face, u, v}
+  // output: THREE.Vector3
+  function getMorphedPoint(face, u, v) {
+    // 1. 球体位置 (Sphere) - 半径 1
+    const sphereP = SimpleS2.faceUVToXYZ(face, u, v); // 已经是归一化的
+    const vecSphere = new THREE.Vector3(sphereP.x, sphereP.y, sphereP.z); // S2 Z=Up (Lat)
+
+    // 2. 立方体位置 (Cube) - 边长 2 (u,v from -1 to 1)
+    // 我们需要把 face, u, v 转回 3D 坐标，但不做归一化
+    let cubeX, cubeY, cubeZ;
+    switch(face) {
+      case 0: cubeX = 1; cubeY = u; cubeZ = v; break;
+      case 1: cubeX = -u; cubeY = 1; cubeZ = v; break;
+      case 2: cubeX = -u; cubeY = -v; cubeZ = 1; break;
+      case 3: cubeX = -1; cubeY = -v; cubeZ = -u; break;
+      case 4: cubeX = v; cubeY = -1; cubeZ = -u; break;
+      case 5: cubeX = v; cubeY = u; cubeZ = -1; break;
+    }
+    const vecCube = new THREE.Vector3(cubeX, cubeY, cubeZ);
+
+    // 3. 展开位置 (Unfolded)
+    // 布局：十字形
+    // Center: Face 0
+    // Left: Face 1, Right: Face 4, Top: Face 2, Bottom: Face 5, Far Right: Face 3
+    // 这种布局在 S2 中可能不连续，我们用一种常见的十字展开
+    // Face 0 (Front) -> (0, 0)
+    // Face 1 (Top) -> (0, 2)
+    // Face 2 (Right) -> (2, 0) ...
+    // 为了视觉简单，我们把它们平铺在 XY 平面
+    let ufX = 0, ufY = 0;
+    // 偏移量 (offset) * 2 (因为面宽是2)
+    const S = 2.1; // 加一点间隙
+
+    // 调整 S2 Face 定义到平面布局
+    // S2 Faces: 0:X+, 1:Y+, 2:Z+
+    if (face === 0) { ufX = 0; ufY = 0; }      // Center
+    else if (face === 1) { ufX = -S; ufY = 0; } // Left
+    else if (face === 4) { ufX = S; ufY = 0; }  // Right
+    else if (face === 2) { ufX = 0; ufY = S; }  // Top
+    else if (face === 5) { ufX = 0; ufY = -S; } // Bottom
+    else if (face === 3) { ufX = S*2; ufY = 0; } // Far Right
+
+    // 展开时，我们将平面放在 Z=0 平面，使用 u,v 作为局部 x,y
+    const vecUnfold = new THREE.Vector3(ufX + u, ufY + v, 0);
+
+    // --- 混合 (Morphing) ---
+    // 第一阶段: 球 -> 方
+    const p1 = new THREE.Vector3().lerpVectors(vecSphere, vecCube, morphFactors.sphereToCube);
+    // 第二阶段: 方 -> 展
+    const p2 = new THREE.Vector3().lerpVectors(p1, vecUnfold, morphFactors.cubeToUnfold);
+
+    // 坐标系修正：
+    // SimpleS2 使用 Z轴向上 (sin(lat))
+    // Three.js 默认 Y轴向上
+    // 我们统一旋转一下，让 Z轴向上在视觉上更舒服 (Face 2 at Top)
+    // 这里的 mapping: x->x, z->y, y->-z 或者直接旋转 Group
+    // 我们直接返回 p2，并在外部旋转整个 Group
+    return p2;
+  }
+
+  // 每帧更新网格顶点
+  function updateEarthMesh() {
+    earthGroup.children.forEach(mesh => {
+      const face = mesh.userData.faceIndex;
+      const originals = mesh.userData.originalPositions;
+      const posAttr = mesh.geometry.attributes.position;
+
+      for(let i=0; i<posAttr.count; i++) {
+        const uv = originals[i];
+        const p = getMorphedPoint(face, uv.u, uv.v);
+        posAttr.setXYZ(i, p.x, p.z, -p.y); // 简单的轴交换适配相机
+      }
+      posAttr.needsUpdate = true;
+    });
+  }
+
+  // 模式控制
+  function setMode(mode) {
+    currentMode = mode;
+
+    // 更新按钮样式
+    document.querySelectorAll('.mode-btn').forEach((btn, idx) => {
+      if(idx === mode) btn.classList.add('active');
+      else btn.classList.remove('active');
+    });
+
+    // 更新提示
+    const tips = [
+      "标准球体投影：S2 算法的基础，真实的地球形态。",
+      "球变方 (Sphere-to-Cube)：S2 为了计算高效，将球面投影到外切正方体。",
+      "平面展开 (Unfolding)：将 3D 表面展开为 2D 平面，便于构建希尔伯特曲线索引。"
+    ];
+    document.getElementById('mode-tip').innerText = tips[mode];
+
+    // 在展开模式下，停止旋转方便观察
+    if (mode === 2) {
+      controls.autoRotate = false;
+      // 将相机移动到正前方
+      resetCameraToFront();
+    } else {
+      controls.autoRotate = true;
+    }
+  }
+
+  function resetCameraToFront() {
+    const duration = 1000;
+    const startPos = camera.position.clone();
+    const targetPos = new THREE.Vector3(0, 0, 9); // 远一点看展开图
+    const startTime = Date.now();
+
+    function anim() {
+      const now = Date.now();
+      const p = Math.min((now - startTime) / duration, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+
+      camera.position.lerpVectors(startPos, targetPos, 0.05);
+      controls.target.lerp(new THREE.Vector3(0,0,0), 0.1);
+
+      if (p < 1) requestAnimationFrame(anim);
+    }
+    anim();
+  }
+
+  function updateVisualization() {
+    controls.autoRotate = false;
+
+    // 清除旧线段
+    while(cellGroup.children.length > 0){
+      const obj = cellGroup.children[0];
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) obj.material.dispose();
+      cellGroup.remove(obj);
+    }
+
+    const lat = parseFloat(document.getElementById('lat').value);
+    const lng = parseFloat(document.getElementById('lng').value);
+    let level = parseInt(document.getElementById('level').value);
+    const showParents = document.getElementById('showParents').checked;
+
+    if (level < 0) level = 0;
+    if (level > 20) level = 20;
+
+    const targetCell = SimpleS2.getCell(lat, lng, level);
+
+    document.getElementById('out-token').innerText = SimpleS2.getQuadKey(targetCell);
+    document.getElementById('out-face').innerText = targetCell.face;
+    document.getElementById('out-level').innerText = targetCell.level;
+
+    // 目标点位置更新 (逻辑必须与 getMorphedPoint 一致)
+    const p = SimpleS2.latLngToXYZ(lat, lng);
+    const fuv = SimpleS2.xyzToFaceUV(p.x, p.y, p.z);
+    // 在 updateLoop 中我们会实时更新 targetPointMesh 的位置，所以这里只需要存数据
+    targetPointMesh.userData.s2 = { face: fuv.face, u: fuv.u, v: fuv.v };
+
+    // 绘制层级网格
+    const levelsToDraw = showParents ? getParentLevels(level) : [level];
+
+    levelsToDraw.forEach((lvl) => {
+      const isTarget = (lvl === level);
+      const cell = SimpleS2.getCell(lat, lng, lvl);
+      drawCell(cell, isTarget, lvl);
+    });
+  }
+
+  function getParentLevels(currentLevel) {
+    let levels = [];
+    for (let i = 0; i <= currentLevel; i++) {
+      levels.push(i);
+    }
+    return levels;
+  }
+
+  function drawCell(cell, isTarget, level) {
+    // 获取 Cell 4个角的 FaceUV
+    const cornersFaceUV = SimpleS2.getCellCorners(cell);
+
+    // 创建几何体，需要在每一帧 update 中根据形变更新位置
+    // 所以这里我们创建一个自定义的 LineLoop，并在 animate 中更新它
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(5 * 3); // 4 corners + close
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    let color = isTarget ? 0x00ff99 : 0x004488;
+    let opacity = isTarget ? 1.0 : 0.3;
+
+    const material = new THREE.LineBasicMaterial({
+      color: color,
+      transparent: true,
+      opacity: opacity
+    });
+
+    const line = new THREE.Line(geometry, material);
+
+    // 将原始数据存入 userData，方便动画更新
+    line.userData = {
+      type: 's2Cell',
+      corners: cornersFaceUV, // Array of {face, u, v}
+      level: level,
+      isTarget: isTarget
+    };
+
+    cellGroup.add(line);
+
+    // 如果是 Target，加一个填充面
+    if (isTarget) {
+      const meshGeo = new THREE.BufferGeometry();
+      const meshPos = new Float32Array(6 * 3); // 2 triangles
+      meshGeo.setAttribute('position', new THREE.BufferAttribute(meshPos, 3));
+
+      const meshMat = new THREE.MeshBasicMaterial({
+        color: 0x00ff99,
+        transparent: true,
+        opacity: 0.2,
+        side: THREE.DoubleSide
+      });
+      const mesh = new THREE.Mesh(meshGeo, meshMat);
+      mesh.userData = {
+        type: 's2CellMesh',
+        corners: cornersFaceUV,
+        level: level
+      };
+      cellGroup.add(mesh);
+    }
+  }
+
+  // 更新线框和目标点的位置
+  function updateOverlayPositions() {
+    // 1. 更新 Target Point
+    if (targetPointMesh.userData.s2) {
+      const d = targetPointMesh.userData.s2;
+      const p = getMorphedPoint(d.face, d.u, d.v);
+
+      // 稍微浮起一点，避免 z-fight
+      // 注意：在 Cube/Unfold 模式下法线方向不同，简单处理是沿 Z(visual Y) 提升
+      // 更好的方法是根据当前 Mode 决定 Offset
+      let offset = 1.02;
+      if (currentMode > 0) offset = 1.0; // Cube 模式下已经是表面了
+
+      // 在 Sphere 模式下，我们向外挤出
+      // 在 Cube/Unfold 模式下，我们直接加 Z 轴偏移
+      const finalP = new THREE.Vector3(p.x, p.z, -p.y);
+
+      if (currentMode === 0) {
+        finalP.multiplyScalar(offset);
+      } else {
+        finalP.z += 0.05; // 简单的垂直偏移
+      }
+
+      targetPointMesh.position.copy(finalP);
+
+      // 缩放动画
+      const s = 1 + Math.sin(Date.now() * 0.01) * 0.3;
+      targetPointMesh.scale.set(s, s, s);
+    }
+
+    // 2. 更新 Cells
+    cellGroup.children.forEach(child => {
+      if (!child.userData.corners) return;
+
+      const corners = child.userData.corners;
+      const posArr = child.geometry.attributes.position.array;
+      const isMesh = (child.userData.type === 's2CellMesh');
+
+      // 提升高度
+      let rOffset = 0;
+      if (currentMode === 0) rOffset = 0.002 + (child.userData.level * 0.001);
+      else rOffset = 0.02; // Flat modes
+
+      const mappedPoints = corners.map(c => {
+        const mp = getMorphedPoint(c.face, c.u, c.v);
+        const vec = new THREE.Vector3(mp.x, mp.z, -mp.y);
+
+        if (currentMode === 0) {
+          vec.multiplyScalar(1 + rOffset);
+        } else {
+          vec.z += rOffset;
+        }
+        return vec;
+      });
+
+      if (isMesh) {
+        // 2 Triangles: 0-1-2, 0-2-3
+        const idxs = [0, 1, 2, 0, 2, 3];
+        for(let i=0; i<6; i++) {
+          const p = mappedPoints[idxs[i]];
+          posArr[i*3] = p.x;
+          posArr[i*3+1] = p.y;
+          posArr[i*3+2] = p.z;
+        }
+      } else {
+        // Line Loop: 0-1-2-3-0
+        for(let i=0; i<5; i++) {
+          const p = mappedPoints[i % 4];
+          posArr[i*3] = p.x;
+          posArr[i*3+1] = p.y;
+          posArr[i*3+2] = p.z;
+        }
+      }
+
+      child.geometry.attributes.position.needsUpdate = true;
+      if (isMesh) child.geometry.computeVertexNormals();
+    });
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+
+    // --- 处理平滑过渡 ---
+    // 目标值
+    let targetS2C = (currentMode >= 1) ? 1 : 0;
+    let targetC2U = (currentMode === 2) ? 1 : 0;
+
+    // 简单的 Lerp
+    const speed = 0.05;
+    morphFactors.sphereToCube += (targetS2C - morphFactors.sphereToCube) * speed;
+    morphFactors.cubeToUnfold += (targetC2U - morphFactors.cubeToUnfold) * speed;
+
+    // 只有当数值有显著变化时才更新 Geometry (节省性能)
+    if (Math.abs(targetS2C - morphFactors.sphereToCube) > 0.001 ||
+      Math.abs(targetC2U - morphFactors.cubeToUnfold) > 0.001 ||
+      currentMode === 0) { // Sphere 模式下如果旋转可能需要微调? 不，Sphere 几何体是不变的。
+
+      updateEarthMesh();
+      updateOverlayPositions();
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  function resetCamera() {
+    if (currentMode === 2) {
+      resetCameraToFront();
+    } else {
+      camera.position.set(0, 0, 4.5);
+      controls.target.set(0, 0, 0);
+      controls.autoRotate = true;
+    }
+  }
+
+  function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+</script>
+</body>
+</html>
